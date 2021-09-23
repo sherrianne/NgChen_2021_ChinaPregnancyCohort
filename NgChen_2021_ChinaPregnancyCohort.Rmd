@@ -1,0 +1,1951 @@
+---
+title: "China Pregnancy Cohort (Ng/Chen et al, 2021)"
+author: "Sherrianne Ng"
+date: "17/09/2021"
+output:
+  html_document:
+    toc: true
+    toc_depth: 6
+---
+
+***
+
+The analysis codes and processed datasets pertain to the following publication: 
+
+Ng/Chen, et al. The pregnancy vaginal microbiome, sialidase activity, leukocyte presence and lower risk of preterm birth in a Chinese population. Journal X,X, doi: (2021).
+
+
+***
+
+# Setup
+
+```{r setup, message=FALSE, warning=FALSE}
+# Load packages
+library(broom)
+library(caret)
+library(cowplot)
+library(corrplot)
+library(ggpubr)
+library(grid)
+library(here)
+library(patchwork)
+library(performance)
+library(PerformanceAnalytics)
+library(psych)
+library(reactable)
+library(survey)
+library(tidyverse)
+library(viridis)
+
+# Functions 
+source(here("Functions", "RadialDonutPlot.R")) # Radial plot
+source(here("Functions", "CorrelationPlot.R")) # Correlation plots
+source(here("Functions", "MicrobiomeProfiles.R")) # Microbiome profiles 
+source(here("Functions", "BarPlots.R")) # Bar plots
+```
+
+***
+
+# Data
+
+## Metadata 
+
+This is supplementary data file 1 available with manuscript. 
+
+```{r}
+# Full Cohort (n=2796) 
+fullcohort <- read.csv(here("Data", "NgChen_SupplementaryTable1.csv"), header=TRUE) %>%
+  filter(SampleType == "Vaginal swab")
+
+# Final Cohort (n=2646)
+finalcohort <- fullcohort %>%
+  filter(SampleTrimesters != "3rd") %>%
+  filter(VMG %in% c("VMG I", "VMG II", "VMG III", "VMG IV-A", "VMG IV-B", "VMG V", 
+                    "VMG VI", "VMG VII"))
+
+# Outcome Cohort (n=1379)
+outcomecohort <- filter(finalcohort, !is.na(Age) & !is.na(BirthGestation))
+
+# Sub-cohort (n=819)
+subcohort <- outcomecohort %>%
+  filter(!is.na(SialidaseActivity) & !is.na(Leukocyte) & !is.na(Chorioamnionitis)) %>%
+  mutate(LactoDomDep = factor(LactoDomDep, levels = c("Dominant", "Deplete")),
+         SialidaseActivity = factor(SialidaseActivity, levels = c("High", "Low")),
+         Leukocyte = factor(Leukocyte, levels = c("High", "Low")),
+         Chorioamnionitis = factor(Chorioamnionitis, levels = c("Chorio+", "Chorio-")))
+```
+
+## Relative Abundance 
+
+The relative abundance data for the final cohort (n=2646) based on counts summed by most dominant genera and species. 
+
+```{r}
+# Dominant genera
+fullcohort_genera <- read.csv(here("Data", "FinalCohort-2646_DominantGenera_RelativeAbundance.csv"), header = TRUE)
+
+# Dominant species
+fullcohort_species <- read.csv(here("Data", "FinalCohort-2646_DominantSpecies_RelativeAbundance.csv"), header = TRUE)
+```
+
+***
+
+# Main Figures 
+
+## Figure 1a 
+
+```{r fig.width=14, fig.height=22}
+# Panel 1: Dominant Species Group
+Fig1a_panel1 <- ggplot(finalcohort, aes(x = DomSpecGroup, fill = DomSpecGroup)) + 
+  geom_bar() + 
+  scale_fill_viridis(discrete = TRUE) + 
+  geom_text(stat = 'count', aes(label = ..count..), 
+            position = position_dodge(0.9), vjust = -0.2 , size = 5.5) +
+  labs(title = "Dominant Species Groups") + 
+  theme_bw() + 
+  theme(plot.title = element_text(hjust = 0.5, size = 26), 
+        axis.title.x = element_blank(), 
+        axis.text.x = element_blank(), 
+        axis.ticks.x = element_blank(), 
+        axis.title.y = element_text(size = 26), 
+        axis.text.y = element_text(size = 24),
+        legend.position = "none", 
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_rect(fill = "white", colour = "black"))
+
+# Panel 2: Relative Abundance
+Fig1a_panel2 <- ggplot(finalcohort, 
+                       aes(x = DomSpecGroup, 
+                           y = DomSpecGroup_Proportion, 
+                           fill = DomSpecGroup)) +
+  stat_boxplot(geom = 'errorbar', width = 0.5) +
+  geom_boxplot() + 
+  scale_fill_viridis(discrete = TRUE) + 
+  labs(y = "Relative Abundance") + 
+  theme_bw() + 
+  theme(axis.title.x = element_blank(), 
+        axis.text.x = element_blank(), 
+        axis.ticks.x = element_blank(), 
+        axis.title.y = element_text(size = 26), 
+        axis.text.y = element_text(size = 24), 
+        legend.position = "none", 
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_rect(fill = "white", colour = "black"))
+
+# Panel 3: Shannon Diversity Index
+labels <- c("Aerococcus spp.", "Anaerococcus spp.", "Atopobium vaginae",  
+            "Bifidobacterium spp.", "Gardnerella spp.", "Lactobacillus crispatus", 
+            "Lactobacillus delbrueckii", "Lactobacillus gasseri", "Lactobacillus iners",
+            "Lactobacillus jensenii", "Lactobacillus spp.", "Megasphaera spp.",
+            "Prevotella spp.", "Shuttleworthia spp.", "Streptococcus agalactiae", 
+            "Streptococcus anginosus", "Streptococcus luteciae", "Streptococcus spp.",
+            "Veillonella spp.")  
+Fig1a_panel3 <- ggplot(finalcohort, 
+                       aes(x = DomSpecGroup, 
+                           y = ShannonDiversity, 
+                           fill = DomSpecGroup)) +
+  stat_boxplot(geom = 'errorbar', width = 0.5) + 
+  geom_boxplot() + 
+  scale_fill_viridis(discrete = TRUE, guide = guide_legend(nrow = 5)) + 
+  scale_x_discrete(labels = labels) +
+  labs(x = "Dominant Species", 
+       y = "Shannon Diversity Index", 
+       fill = "Species") + 
+  theme_bw() +
+  theme(axis.title.x = element_text(size = 26), 
+        axis.text.x = element_text(size = 22, face = "italic"), 
+        axis.title.y = element_text(size = 26), 
+        axis.text.y = element_text(size = 24), 
+        legend.position = "none",
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_rect(fill = "white", colour = "black")) +
+  guides(x = guide_axis(angle = 90))
+
+# Output plot
+# png(here("Output", "Figure1a.png"), width = 2400, height = 4600, res = 200)
+plot_grid(Fig1a_panel1, Fig1a_panel2, Fig1a_panel3, ncol = 1, rel_heights = c(1,1,1.7),
+          align = "v")
+# dev.off()
+```
+
+***
+
+## Figure 1b
+
+```{r fig.width=15, fig.height=15}
+# Merge metadata and species relative abundance for outcome cohort
+outcomecohort_meta_species <- 
+  merge(outcomecohort, fullcohort_species, 
+        by = "Sample_ID", all = FALSE) %>%
+  select(Sample_ID, VMG, Lactobacillus_crispatus:Veillonella_spp.) %>%
+  arrange(VMG) %>%
+  rowid_to_column(var = "RowNum") %>%
+  pivot_longer(cols = Lactobacillus_crispatus:Veillonella_spp.) %>%
+  rename(Species = "name") %>%
+  mutate(VMG = factor(VMG,
+                      levels = c("VMG I", "VMG II", "VMG III", "VMG IV-A", 
+                                 "VMG IV-B", "VMG V", "VMG VI", "VMG VII")),
+         Species = factor(Species, levels = species_levels))
+
+# Aesthetics
+species_color <- c("#1f78b4", "#33a02c", "#ff7f00", "#e31a1c", "#e31a1c", 
+                   "#e31a1c", "#e31a1c", "#e31a1c", "#e31a1c", "#fb9a99", 
+                   "#fb9a99", "#fb9a99", "#fb9a99", "#fb9a99", "#fb9a99",
+                   "#6a3d9a", "#a6cee3", "#a6cee3", "#cab2d6", "#C0C0C0")
+vmg_color <- c("#1f78b4", "#33a02c", "#ff7f00", "#e31a1c", 
+               "#fb9a99", "#6a3d9a", "#a6cee3", "#cab2d6")
+
+# Draw plot
+radial <- myRadialStackedBarPlot(outcomecohort_meta_species)
+donut <- myDonutPlot(outcomecohort_meta_species, "VMG (n=1379)")
+Figure1b <- ggdraw() + 
+  draw_plot(radial, 0, 0, 1, 1, 0.875) + 
+  draw_plot(donut, 0.083, 0.094, 1, 1) + 
+  theme(plot.margin = unit(c(1, 3, 1, 1), "cm"))
+
+# Output plot
+# png(here("Output", "Figure1b.png"), width = 3100, height = 3000, res = 200)
+Figure1b
+# dev.off()
+```
+
+***
+
+## Figure 1c
+
+```{r fig.width=15, fig.height=15}
+# Merge metadata and species relative abundance for final cohort
+finalcohort_meta_species <- merge(finalcohort, fullcohort_species, 
+                                  by = "Sample_ID", all = FALSE) %>%
+  select(Sample_ID, Lactobacillus_crispatus:Veillonella_spp.)
+  
+# Correlation data
+cor_A <- cor(finalcohort_meta_species[,2:21], method = "spearman")
+cor_B <- cor(finalcohort_meta_species[,2:21], method = "spearman")
+
+# Matrix of the p-value of the correlation
+p.mat <- cor.mtest(finalcohort_meta_species[,2:21])
+
+# Correlation plot 
+# png(here("Output", "Figure1c.png"), width = 3000, height = 3000, res = 200)
+corrplot(cor_A, mar = c(1,0,1,0), type = "upper", addCoef.col = "black", tl.pos = "tl",
+         hclust.method = "ward.D2", number.font = 1, number.cex = 1.3, 
+         tl.srt = 45, tl.cex = 1.7, cl.cex = 1.5)
+corrplot(cor_B, mar = c(1,0,1,0), type = "lower", tl.pos = "tl", add = T, 
+         insig = "label_sig", p.mat = p.mat, sig.level = c(.001, .01, .05), 
+         hclust.method = "ward.D2", tl.srt = 45, pch.cex = 2, tl.cex = 1.7, 
+         cl.cex = 1.5)
+# dev.off()
+```
+
+***
+
+## Figure 2a
+
+> Plot
+
+```{r fig.width=14, fig.height=11}
+# Merge metadata and genera relative abundance for sub-cohort
+subcohort_meta_genera <- merge(subcohort, fullcohort_genera, 
+                          by = "Sample_ID", all = FALSE) 
+
+# Count
+count(subcohort_meta_genera, SialidaseActivity)
+
+# Prepare diversity and richness data for women with high and low sialidase
+highsial <- func_sialdata(subcohort_meta_genera, sialidase = 'High')
+lowsial <- func_sialdata(subcohort_meta_genera, sialidase = 'Low')
+
+# Prepare microbiome profiles data for women with high and low sialidase 
+highsial_mp <- func_sialdata_mp(subcohort_meta_genera, sialidase = 'High')
+lowsial_mp <- func_sialdata_mp(subcohort_meta_genera, sialidase = 'Low')
+
+# Panel 1: High Sialidase (Microbiome Profile)
+Fig2a_panel1 <- 
+  ggplot(highsial_mp, 
+         aes(x = RowNumber, y = value, 
+             fill = factor(Genus, levels = genus_label))) +
+  scale_fill_manual(values = genus_color, guide = guide_legend(nrow = 3)) +
+  geom_bar(stat = "identity", width = 1, preserve = "single") + 
+  labs(title = "Microbiome Profiles (High Sialidase Activity Women), n=36", 
+       y = "Relative Abundance", fill = "Genus") + 
+  main_theme
+
+# Panel 2: High Sialidase (Shannon Diversity)
+Fig2a_panel2 <- 
+  ggplot(highsial, 
+         aes(x = RowNumber, y = IPSCohort_ShannonDiversity)) +
+  geom_col(width = 1) + 
+  labs(y = "Shannon") + 
+  ylim(0,2) + 
+  main_theme
+
+# Panel 3: High Sialidase (Species Observed)
+Fig2a_panel3 <- 
+  ggplot(highsial, 
+         aes(x = RowNumber, y = IPSCohort_SpeciesObserved)) + 
+  geom_col(width = 1) + 
+  ylim(0,40) + 
+  labs(y = "S Obs") + 
+  main_theme
+
+# Panel 4: Low Sialidase (Microbiome Profiles)
+Fig2a_panel4 <- 
+  ggplot(lowsial_mp, 
+         aes(x = RowNumber, y = value, 
+             fill = factor(Genus, levels = genus_label))) +
+  scale_fill_manual(values = genus_color, guide = guide_legend(nrow = 3)) +
+  geom_bar(stat = "identity", width = 1, preserve = "single") + 
+  labs(title = "Microbiome Profiles (Low Sialidase Activity Women), n=783",
+       y = "Relative Abundance", fill = "Genus") + 
+  main_theme
+
+# Panel 5: Low Sialidase (Shannon Diversity)
+Fig2a_panel5 <-
+  ggplot(lowsial, 
+         aes(x = RowNumber, y = IPSCohort_ShannonDiversity)) + 
+  geom_col(width = 1) + 
+  labs(y = "Shannon") + 
+  main_theme
+
+# Panel 6: Low Sialidase (Species Observed)
+Fig2a_panel6 <- 
+  ggplot(lowsial, 
+         aes(x = RowNumber, y = IPSCohort_SpeciesObserved)) + 
+  geom_col(width = 1) + 
+  ylim(0,40) + 
+  labs(y = "S Obs") + 
+  main_theme
+
+# Output plot
+# png(here("Output", "Figure2a.png"), width = 2300, height = 2300, res = 200)
+plot_grid(Fig2a_panel1, Fig2a_panel2, Fig2a_panel3, 
+          Fig2a_panel4, Fig2a_panel5, Fig2a_panel6, 
+          ncol = 1, rel_heights = c(6,2,2,6,2,2), 
+          align = "v")
+# dev.off()
+```
+
+> Legend 
+
+```{r fig.width=13}
+# Plot figure legend only
+FigLegend <- 
+  ggplot(lowsial_mp, 
+         aes(x = RowNumber, y = value, 
+             fill = factor(Genus, levels = genus_label))) +
+  scale_fill_manual(values = genus_color, guide = guide_legend(nrow = 4)) +
+  labs(fill = "Genus") + 
+  geom_bar(stat = "identity", width = 1, preserve = "single") + 
+  theme(legend.title = element_text(size = 14),
+        legend.text = element_text(size = 14), 
+        legend.position = "bottom")
+
+# png(here("Output", "Figure2a_legend.png"), width = 2300, height = 220, res = 200)
+legend <- get_legend(FigLegend)
+as_ggplot(legend)
+# dev.off()
+```
+
+***
+
+## Figure 2b 
+
+> Summary
+
+```{r}
+# Lactobacillus Abundance 
+subcohort %>% 
+  select(SialidaseActivity, LactoDomDep, VMG) %>%
+  modify_if(is.character, as.factor) %>%
+  split(.$SialidaseActivity) %>%
+  map(summary, maxsum = 10)
+```
+
+> Statistics 
+
+```{r}
+# Fisher's Exact Test 
+set.seed(1)
+ft_res <- lapply(subcohort[,c(14,13)], 
+                 fisher.test, y = subcohort$SialidaseActivity, 
+                 simulate.p.value = TRUE, B = 2000)
+print(ft_res)
+```
+
+> Plots
+
+```{r fig.width=12, fig.height=5}
+# Lactobacillus Abundance 
+Figure2b_panel1 <- func_stackedbar_lactoabun(subcohort,
+                                             x_var = "SialidaseActivity",
+                                             lacto_colors = c("#1f78b4", "#e31a1c"),
+                                             title = "Lactobacillus Abundance",
+                                             subtitle = "p=2.403e-13",
+                                             nrow_num = 2,
+                                             legend_position = "bottom")
+
+
+# VMG 
+Figure2b_panel2 <- func_stackedbar_vmg(subcohort, 
+                                       x_var = "SialidaseActivity",
+                                       title = "Vaginal Microbiome Group",
+                                       subtitle = "p=0.0005",
+                                       nrow_num = 3,
+                                       legend_position = "bottom")
+
+# Combine plots 
+Figure2b <- plot_grid(Figure2b_panel1, Figure2b_panel2, nrow = 1, align = "h", rel_widths = c(1,1.2))
+
+# png(here("Output", "Figure2b.png"), width = 2300, height = 1200, res = 200)
+Figure2b
+# dev.off()
+```
+
+***
+
+## Figure 2c
+
+The figure was generated using LefSe tool on Huttenhower Galaxy (https://huttenhower.sph.harvard.edu/galaxy/).
+
+**The input data used was:** `IPSCohort-819_HuttenhowerGalaxy_MASTER_SialidaseActivity.txt`
+
+**The parameters used were as follows:**
+
+**(A) Format Data for LefSe**
+
+- Select whether the vectors (features and meta-data information) are listed in rows or columns: Rows
+- Select which row to use as class: SialidaseActivity_Recode
+- Select which row to use as subclass: no subclass
+- Select which row to use as subject: Sample_ID
+- Per-sample normalization of the sum of the values to 1M (recommended when very low values are present): Yes
+
+**(B) LDA Effect Size (LEfSe)**
+
+- Alpha value for the factorial Kruskal-Wallis test among classes: 0.05
+- Alpha value for the pairwise Wilcoxon test between subclasses: 0.05
+- Threshold on the logarithmic LDA score for discriminative features: 2.0
+- Do you want the pairwise comparisons among subclasses to be performed only among the subclasses with the same name? No. 
+- Set the strategy for multi-class analysis: All-against-all (more strict)
+
+**(C) Plot LEfSe Results**
+
+- Set text and label options (font size, abbreviations, ...): Advanced 
+  - The title of the cladogram:	Not available.	
+  - Number of label levels to be displayed (-1 means all):	1	
+  - Maximum length of feature names:	60	
+  - Title font size:	14	
+  - Label font size:	12	
+  - Class font size:	12
+- Set some graphical options to personalize the output: Default
+- Output format: png
+- Set the dpi resolution of the output: 1200
+
+**LefSe:** IPSCohort-819_SialidaseActivity_LefSe.png
+
+```{r}
+figure2c_lefse <- here("Output", "IPSCohort-819_SialidaseActivity_LefSe.png")
+figdraw <- ggdraw() + draw_image(figure2c_lefse, scale = 1)
+figdraw
+```
+
+**(D) Plot Cladogram**
+
+- Set structural parameters of the cladogram: Default
+- Set text and label options (font size, abbreviations, ...): Default
+- Set some graphical options to personalize the output: Default
+- Output format: png
+- Set the dpi resolution of the output: 1200
+
+**Cladogram:** IPSCohort-819_SialidaseActivity_Cladogram.png
+
+```{r}
+figure2c_cladogram <- here("Output", "IPSCohort-819_SialidaseActivity_Cladogram.png")
+figdraw <- ggdraw() + draw_image(figure2c_cladogram, scale = 1)
+figdraw
+```
+
+<style>
+div.grey { background-color:#e3e6e9; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "grey">
+
+**NOTE** 
+
+- Only the LefSe plot was used for Figure 2c.
+
+</div>
+<p>
+
+***
+
+## Figure 2d
+
+> Statistics
+
+The statistics shown here pertain only to *Lactobacillus*, *Gardnerella*, *Prevotella* and *Atopobium*. See Table S4 for all statistics. 
+
+```{r}
+# Merge metadata and species relative abundance for sub-cohort
+subcohort_meta_genera <- merge(subcohort, fullcohort_genera, 
+                          by = "Sample_ID", all = FALSE) 
+
+# Mann-Whitney test
+lapply(subcohort_meta_genera[c(23:24,27,26)], 
+       function(x) wilcox.test(x ~ SialidaseActivity,
+                               p.adjust.method = "bonferroni", 
+                               data = subcohort_meta_genera))
+```
+
+> Plots 
+
+```{r fig.width=8, fig.height=8}
+# Aesthetics
+sial_colors <- c("#c51b7d", "#4d9221")
+
+# Select columns to plot
+colNames <- names(subcohort_meta_genera)[c(23:24,27,26)]
+
+# Boxplots 
+plt_list <- list()
+
+for(i in colNames){
+  boxplot <- ggplot(subcohort_meta_genera, 
+                    aes(x = SialidaseActivity,
+                        y = .data[[i]], 
+                        fill = SialidaseActivity)) +
+  stat_boxplot(geom = 'errorbar', width = 0.5) + 
+    geom_boxplot() + 
+    scale_fill_manual(values = sial_colors) +
+    labs(title = i, subtitle = "p<0.01", y = "Relative Abundance") + 
+    geom_jitter(shape = 16, position = position_jitter(0.2)) + 
+    theme_bw() + 
+    theme(plot.title = element_text(hjust = 0.5, size = 19), 
+          plot.subtitle = element_text(hjust = 0.5, size = 18),
+          axis.title.x = element_blank(), 
+          axis.text.x = element_text(size = 18), 
+          axis.title.y = element_text(size = 19), 
+          axis.text.y = element_text(size = 18), 
+          legend.position = "none")
+  
+  plt_list[[i]] <- boxplot
+}
+
+# Combine plots
+Figure2d <- wrap_plots(plt_list, ncol = 2)
+
+# png(here("Output", "Figure2d.png"), width = 2000, height = 2000, res = 200)
+Figure2d
+# dev.off()
+```
+
+***
+
+## Figure 2e
+
+```{r}
+# Counts 
+count(subcohort, LactoDomDep)
+count(subcohort, SialidaseActivity)
+
+# View data
+table(subcohort$SialidaseActivity, subcohort$LactoDomDep)
+
+# Labels
+TP <- 30
+FP <- 6
+FN <- 183
+TN <- 600
+sen <- TP+FN 
+spec <- FP+TN 
+
+# Confusion matrix
+lvs <- c("no", "yes")
+actual <- factor(rep(lvs, times = c(spec, sen)),
+                levels = rev(lvs))
+pred <- factor(
+               c(
+                 rep(lvs, times = c(TN, FP)),
+                 rep(lvs, times = c(FN, TP))),
+               levels = rev(lvs))
+
+xtab <- table(pred, actual)
+
+# Account for disease prevalence 15%
+confusionMatrix(xtab, prevalence = 0.15)
+```
+
+***
+
+## Figure 3a
+
+> Summary
+
+```{r}
+subcohort %>% 
+  select(LeukocyteGrades, LactoDomDep, VMG) %>% 
+  modify_if(is.character, as.factor) %>%
+  split(.$LeukocyteGrades) %>%
+  map(summary)
+```
+
+> Statistics 
+
+```{r}
+# Fisher's Exact Test 
+set.seed(1)
+ft_res <- lapply(subcohort[,c(14,13)], 
+                 fisher.test, y = subcohort$LeukocyteGrades, 
+                 simulate.p.value = TRUE, B = 2000)
+print(ft_res)
+```
+
+> Plots 
+
+```{r fig.width=13, fig.height=4}
+# Lactobacillus Abundance 
+Figure3a_panel1_v2 <- 
+  func_stackedbar_lactoabun(subcohort,
+                            x_var = "LeukocyteGrades",
+                            lacto_colors = c("#1f78b4", "#e31a1c"),
+                            title = "Lactobacillus Abundance (p=0.003)", 
+                            subtitle = "n=165        n=82        n=486          n=86",
+                            nrow_num = 2,
+                            legend_position = "right")
+
+# VMG 
+Figure3a_panel2_v2 <- 
+  func_stackedbar_vmg(subcohort, 
+                      x_var = "LeukocyteGrades",
+                      title = "Vaginal Microbiome Group (p=0.02)",
+                      subtitle = "n=165        n=82        n=486          n=86",
+                      nrow_num = 8, 
+                      legend_position = "right")
+
+# png(here("Output", "Figure3a.png"), width = 3200, height = 1100, res = 200)
+plot_grid(Figure3a_panel1_v2, Figure3a_panel2_v2, nrow = 1,
+          align = "h")
+# dev.off()
+```
+
+***
+
+## Figure 3b 
+
+> Statistics 
+
+```{r}
+# Merge metadata and species relative abundance for sub-cohort
+subcohort_meta_species <- merge(subcohort, fullcohort_species, 
+                          by = "Sample_ID", all = FALSE)
+
+# Kruskall-Wallis test
+set.seed(1)
+lapply(subcohort_meta_species[c(23,26,24,27,32,31)],
+       function(x) kruskal.test(x ~ LeukocyteGrades, 
+                                data = subcohort_meta_species))
+
+# Pairwise wilcox test 
+set.seed(1)
+pwt_res <- lapply(c(23,26,24,27,32,31), function(x) 
+  pairwise.wilcox.test(subcohort_meta_species[[x]], 
+                       subcohort_meta_species$LeukocyteGrades))
+names(pwt_res) <- names(subcohort_meta_species)[c(23,26,24,27,32,31)]
+pwt_res
+```
+
+> Plots 
+
+```{r fig.width=18, fig.height=4}
+# Aesthetics
+leukgrade_colors <- c("#33a02c", "#33a02c", "#e31a1c", "#e31a1c")
+
+# Rename columns 
+subcohort_meta_species_x <- subcohort_meta_species %>%
+  rename("L.crispatus" = "Lactobacillus_crispatus", 
+         "L.gasseri" = "Lactobacillus_gasseri",
+         "L.iners" = "Lactobacillus_iners", 
+         "L.jensenii" = "Lactobacillus_jensenii",
+         "L.delbrueckii" = "Lactobacillus_delbrueckii")
+
+# Figure 3b
+func_3b <- function(y_var, title, subtitle){
+  # Boxplots
+  ggplot(subcohort_meta_species_x, 
+         aes(x = LeukocyteGrades,
+             y = y_var,
+             fill = LeukocyteGrades)) +
+    stat_boxplot(geom = 'errorbar', width = 0.5) + 
+    geom_boxplot() + 
+    scale_fill_manual(values = leukgrade_colors) +
+    labs(title = title, subtitle = subtitle, y = "Relative Abundance") + 
+    geom_jitter(shape = 16, position = position_jitter(0.2)) + 
+    theme_bw() + 
+    theme(plot.title = element_text(hjust = 0.5, size = 19, face = "italic"), 
+          plot.subtitle = element_text(hjust = 0.5, size = 18),
+          axis.title.x = element_blank(), 
+          axis.text.x = element_text(size = 18), 
+          axis.title.y = element_text(size = 19), 
+          axis.text.y = element_text(size = 18), 
+          legend.position = "none")
+}
+
+Figure3b_p1 <- func_3b(subcohort_meta_species_x$L.crispatus, "L. crispatus", "p>0.05")
+Figure3b_p2 <- func_3b(subcohort_meta_species_x$L.gasseri, "L. gasseri", "p>0.05")
+Figure3b_p3 <- func_3b(subcohort_meta_species_x$L.iners, "L. iners", "p<0.01")
+Figure3b_p4 <- func_3b(subcohort_meta_species_x$L.jensenii, "L. jensenii", "p>0.05")
+Figure3b_p5 <- func_3b(subcohort_meta_species_x$L.delbrueckii, "L. delbrueckii", "p>0.05")
+Figure3b_p6 <- func_3b(subcohort_meta_species_x$Lactobacillus_spp., "Lactobacillus spp.", "p>0.05")
+
+# Combined figure
+Figure3b <- plot_grid(Figure3b_p1, Figure3b_p2, Figure3b_p3, 
+                      Figure3b_p4, Figure3b_p5, Figure3b_p6,
+                      nrow = 1)
+
+# png(here("Output", "Figure3b.png"), width = 2500, height = 550, res = 150)
+Figure3b 
+# dev.off()
+```
+
+***
+
+## Figure 3c 
+
+The figure was generated using LefSe tool on Huttenhower Galaxy (https://huttenhower.sph.harvard.edu/galaxy/).
+
+**The input data used was:** `HuttenhowerGalaxy_Subcohort-823_Leukocyte.txt`
+
+**The parameters used were as follows:**
+
+**(A) Format Data for LefSe**
+
+- Select whether the vectors (features and meta-data information) are listed in rows or columns: Rows
+- Select which row to use as class: Leukocyte_Recode
+- Select which row to use as subclass: no subclass
+- Select which row to use as subject: Sample_ID
+- Per-sample normalization of the sum of the values to 1M (recommended when very low values are present): Yes
+
+**(B) LDA Effect Size (LEfSe)**
+
+- Alpha value for the factorial Kruskal-Wallis test among classes: 0.05
+- Alpha value for the pairwise Wilcoxon test between subclasses: 0.05
+- Threshold on the logarithmic LDA score for discriminative features: 2.0
+- Do you want the pairwise comparisons among subclasses to be performed only among the subclasses with the same name? No. 
+- Set the strategy for multi-class analysis: All-against-all (more strict)
+
+**(C) Plot LEfSe Results**
+
+- Set text and label options (font size, abbreviations, ...): Advanced
+  - The title of the cladogram	Not available.	
+  - Number of label levels to be displayed (-1 means all)	1	
+  - Maximum length of feature names	60	
+  - Title font size	14	
+  - Label font size	12	
+  - Class font size	12
+- Set some graphical options to personalize the output: Default
+- Output format: png
+- Set the dpi resolution of the output: 1200
+
+**LefSe:** IPSCohort-819_Leukocyte_LefSe.png
+
+```{r}
+figure3c_lefse <- here("Output", "IPSCohort-819_Leukocyte_LefSe.png")
+figdraw <- ggdraw() + draw_image(figure3c_lefse, scale = 1)
+figdraw
+```
+
+**(D) Plot Cladogram**
+
+- Set structural parameters of the cladogram: Default
+- Set text and label options (font size, abbreviations, ...): Default
+- Set some graphical options to personalize the output: Default
+- Output format: png
+- Set the dpi resolution of the output: 1200
+
+**Cladogram:** IPSCohort-819_Leukocyte_Cladogram.png
+
+```{r}
+figure3c_cladogram <- here("Output", "IPSCohort-819_Leukocyte_Cladogram.png")
+figdraw <- ggdraw() + draw_image(figure3c_cladogram, scale = 1)
+figdraw
+```
+
+***
+
+## Figure 4a
+
+> Summary 
+
+```{r}
+# Outcome cohort 
+outcomecohort %>% 
+  select(Group_PretermTerm, LactoDomDep, VMG) %>%
+  modify_if(is.character, as.factor) %>%
+  split(.$Group_PretermTerm) %>%
+  map(summary)
+  
+# Subcohort 
+subcohort %>%
+  select(Group_PretermTerm, SialidaseActivity, Leukocyte) %>%
+  modify_if(is.character, as.factor) %>%
+  split(.$Group_PretermTerm) %>%
+  map(summary)
+```
+
+> Statistics 
+
+```{r}
+# Fisher's Exact Test: Outcome Cohort
+set.seed(1)
+ft_res <- lapply(outcomecohort[,c(14,13)], 
+                 fisher.test, y = outcomecohort$Group_PretermTerm, 
+                 simulate.p.value = TRUE, B = 2000)
+print(ft_res)
+
+# Fisher's Exact Test: Subcohort
+set.seed(1)
+ft_res <- lapply(subcohort[,c(16,18)], 
+                 fisher.test, y = subcohort$Group_PretermTerm, 
+                 simulate.p.value = TRUE, B = 2000)
+print(ft_res)
+```
+
+> Plots
+
+```{r fig.width=15, fig.height=10}
+# Count preterm/term in outcome cohort and subcohort 
+count(outcomecohort, Group_PretermTerm)
+count(subcohort, Group_PretermTerm)
+
+# Lactobacillus Abundance 
+Figure4a_p1 <- 
+  func_stackedbar_lactoabun(outcomecohort,
+                            x_var = "Group_PretermTerm",
+                            lacto_colors = c("#e31a1c", "#1f78b4"),
+                            title = "Lactobacillus Abundance (p=0.57)",
+                            subtitle = "n=72                            n=1307",
+                            nrow_num = 1,
+                            legend_position = "bottom")
+
+# VMG 
+Figure4a_p2 <- 
+  func_stackedbar_vmg(outcomecohort, 
+                      x_var = "Group_PretermTerm",
+                      title = "Vaginal Microbiome Group (p=0.05)",
+                      subtitle = "n=72                                n=1307",
+                      nrow_num = 2,
+                      legend_position = "bottom")
+
+# Sialidase Activity 
+Figure4a_p3 <- 
+  func_stackedbar_sial(subcohort,
+                       x_var = "Group_PretermTerm",
+                       title = "Sialidase Activity (p=0.45)",
+                       subtitle = "n=46                            n=773",
+                       nrow_num = 1,
+                       legend_position = "bottom")
+
+# Leukocyte
+Figure4a_p4 <- 
+  func_stackedbar_leuk(subcohort,
+                          x_var = "Group_PretermTerm",
+                          title = "Leukocyte (p=0.74)",
+                          subtitle = "n=46                                  n=773",
+                          nrow_num = 1,
+                          legend_position = "bottom")
+
+# Combine plots 
+Figure4a <- plot_grid(Figure4a_p1, Figure4a_p2, 
+                      Figure4a_p3, Figure4a_p4,
+                      nrow = 2, align = "h", rel_widths = c(1,1.2))
+
+# png(here("Output", "Figure4a.png"), width = 3000, height = 2000, res = 200)
+Figure4a
+# dev.off()
+```
+
+***
+
+## Figure 4b
+
+> Statistics 
+
+```{r}
+fig4b_stat <- subcohort %>%
+  mutate(StatGroup = case_when(
+    LactoDomDep == "Deplete" & SialidaseActivity == "High" & Leukocyte == "High" ~ "A",
+    LactoDomDep == "Dominant" & SialidaseActivity == "High" & Leukocyte == "High" ~ "B",
+    LactoDomDep == "Deplete" & SialidaseActivity == "Low" & Leukocyte == "High" ~ "C",
+    LactoDomDep == "Dominant" & SialidaseActivity == "Low" & Leukocyte == "High" ~ "D",
+    LactoDomDep == "Deplete" & SialidaseActivity == "High" & Leukocyte == "Low" ~ "E",
+    LactoDomDep == "Dominant" & SialidaseActivity == "High" & Leukocyte == "Low" ~ "F",
+    LactoDomDep == "Deplete" & SialidaseActivity == "Low" & Leukocyte == "Low" ~ "G",
+    LactoDomDep == "Dominant" & SialidaseActivity == "Low" & Leukocyte == "Low" ~ "H"))
+
+# Kruskal-Wallis
+kruskal.test(BirthGestation ~ StatGroup, data = fig4b_stat)
+```
+
+> Plots 
+
+```{r fig.width=10, fig.height=10}
+# Convert gestation in days to weeks
+subcohort_weeks <- subcohort %>%
+  mutate(BirthGestation_Weeks = BirthGestation/7)
+
+# Aesthetics
+vmg_color <- c("#1f78b4", "#33a02c", "#ff7f00", "#e31a1c",
+                  "#fb9a99", "#6a3d9a", "#a6cee3", "#cab2d6")  
+ldd_colors <- c("#e31a1c", "#1f78b4")
+
+# Facet labels
+sial.labs <- c("High Sialidase Activity", "Low Sialidase Activity")
+names(sial.labs) <- c("High", "Low")
+leuk.labs <- c("Leukocyte High", "Leukocyte Low")
+names(leuk.labs) <- c("High", "Low")
+  
+# Plot 
+Figure4b <- ggplot(subcohort_weeks,
+                   aes(x = LactoDomDep,
+                       y = BirthGestation_Weeks,
+                       fill = LactoDomDep)) +
+  stat_boxplot(geom = 'errorbar', width = 0.5) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(position = position_jitter(0.2), 
+              size = 2.5,
+              alpha = 0.9,
+              aes(colour = VMG)) + 
+  scale_colour_manual(values = vmg_color) +
+  scale_fill_manual(values = ldd_colors, guide = "none") +
+  facet_grid(Leukocyte ~ SialidaseActivity,
+             labeller = labeller(SialidaseActivity = sial.labs,
+                                 Leukocyte = leuk.labs)) +
+  labs(title = "Vaginal Microbiome, Sialidase Activity, Leukocytes and Birth Outcome", 
+       subtitle = "n=819",
+       x = "Lactobacillus Abundance",
+       y = "Birth Gestation (Weeks)") +
+  theme_bw() + 
+  theme(plot.title = element_text(hjust = 0.5, size = 19),
+        plot.subtitle = element_text(hjust = 0.5, size = 18),
+        axis.title.x = element_text(size = 19),
+        axis.text.x = element_text(size = 18),
+        axis.title.y = element_text(size = 19),
+        axis.text.y = element_text(size = 18),
+        strip.background = element_rect(color = "black", size = 1, linetype = "solid"), 
+        strip.text.x = element_text(size = 18, color = "black"),
+        strip.text.y = element_text(size = 18, color = "black"),
+        legend.title = element_text(size = 19),
+        legend.text = element_text(size = 18),
+        legend.position = "bottom")
+  
+# png(here("Output", "Figure4b.png"), width = 2000, height = 2000, res = 200)
+Figure4b
+# dev.off()
+```
+
+***
+
+# Supplementary Figures 
+
+## Figure S1a 
+
+```{r}
+# Full Cohort 
+count(fullcohort)
+
+# Minimum library size 
+fullcohort %>% 
+  mutate(MinLibSize = case_when(
+    is.na(DomSpecGroup) ~ "Exclude",
+    !is.na(DomSpecGroup) ~ "Include")) %>%
+  count(MinLibSize)
+
+# Microbiome Classifications 
+fullcohort %>% 
+  filter(!is.na(DomSpecGroup)) %>%
+  count(VMG, DomSpecGroup)
+
+# Full Cohort: Trimesters 
+count(fullcohort, SampleTrimesters)
+
+# Final Cohort: Women with and without outcome
+finalcohort %>%
+  mutate(OutcomeGroup = case_when(
+    !is.na(Age) & !is.na(BirthGestation) ~ "Outcome",
+    is.na(Age) | is.na(BirthGestation) ~ "NoOutcome")) %>%
+  count(OutcomeGroup)
+
+# Sub-cohort 
+count(subcohort)
+```
+
+***
+
+## Figure S1b 
+
+```{r fig.width=10}
+# Annotate women with and without outcome data then assign levels
+finalcohort_group <- finalcohort %>%
+  filter(SampleType == "Vaginal swab") %>%
+  mutate(OutcomeGroup = case_when(!is.na(Age) & !is.na(BirthGestation) ~ "Outcome", 
+                                  is.na(Age) | is.na(BirthGestation) ~ "NoOutcome"),
+         OutcomeGroup = factor(OutcomeGroup,
+                               levels = c("Outcome", "NoOutcome")), 
+         SampleGestation_Weeks = SampleGestation/7)
+
+# Count
+count(finalcohort_group, OutcomeGroup)
+
+# Aesthetics
+outcome_colors <- c("#e31a1c", "#1f78b4")
+
+# Plot density plot
+FigureS1b <- 
+  ggplot(finalcohort_group, 
+         aes(x = SampleGestation_Weeks, fill = OutcomeGroup)) +
+  geom_histogram(aes(y = ..density..), 
+                 alpha = 0.8, 
+                 position = "identity", 
+                 binwidth = 0.2) +
+  geom_density(alpha = .4) + 
+  scale_x_continuous(breaks = seq(10,40,5)) +
+  scale_fill_manual(values = outcome_colors) + 
+  labs(title = "Sample Gestations",
+       subtitle = "Outcome (n=1379), No Outcome (n=1267)",
+       x = "Sample Gestation (Weeks)",
+       fill = "OutcomeGroup") + 
+  theme_bw() + 
+  theme(plot.title = element_text(hjust = 0.5, size = 19),
+        plot.subtitle = element_text(hjust = 0.5, size = 18),
+        axis.title.x = element_text(size = 19), 
+        axis.text.x = element_text(size = 18), 
+        axis.title.y = element_text(size = 19), 
+        axis.text.y = element_text(size = 18), 
+        legend.title = element_text(size = 16),
+        legend.text = element_text(size = 15),
+        legend.position = "bottom")
+
+
+# png(here("Output", "FigureS1b.png"), width = 2000, height = 1200, res = 200)
+FigureS1b
+# dev.off()
+```
+
+***
+
+## Figure S2
+
+```{r fig.width=13, fig.height=14}
+# Labels
+labels <- c("Aerococcus spp.", "Anaerococcus spp.", "Atopobium vaginae",  
+            "Bifidobacterium spp.", "Gardnerella spp.", "Lactobacillus crispatus", 
+            "Lactobacillus delbrueckii", "Lactobacillus gasseri", "Lactobacillus iners",
+            "Lactobacillus jensenii", "Lactobacillus spp.", "Megasphaera spp.",
+            "Prevotella spp.", "Shuttleworthia spp.", "Streptococcus agalactiae", 
+            "Streptococcus anginosus", "Streptococcus luteciae", "Streptococcus spp.",
+            "Veillonella spp.")  
+
+# Shannon Diversity: non-normalised data
+FigS2_p1 <- ggplot(finalcohort, 
+                   aes(x = DomSpecGroup,
+                       y = ShannonDiversity,
+                       fill = DomSpecGroup)) +
+  stat_boxplot(geom = 'errorbar', width = 0.5) + 
+  geom_boxplot() + 
+  scale_fill_viridis(discrete = TRUE, guide = guide_legend(nrow = 5)) + 
+  scale_x_discrete(labels = labels) +
+  labs(x = "Dominant Species", 
+       y = "Shannon Diversity Index", 
+       fill = "Species") + 
+  theme_bw() +
+  theme(axis.title.x = element_blank(), 
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(), 
+        axis.title.y = element_text(size = 26), 
+        axis.text.y = element_text(size = 24), 
+        legend.position = "none",
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_rect(fill = "white", colour = "black")) +
+  guides(x = guide_axis(angle = 90))
+
+# Shannon Diversity: TMM normalised data
+FigS2_p2 <- ggplot(finalcohort,
+                   aes(x = DomSpecGroup,
+                       y = ShannonDiversity.tmm,
+                       fill = DomSpecGroup)) +
+  stat_boxplot(geom = 'errorbar', width = 0.5) + 
+  geom_boxplot() + 
+  scale_fill_viridis(discrete = TRUE, guide = guide_legend(nrow = 5)) + 
+  scale_x_discrete(labels = labels) +
+  labs(x = "Dominant Species", 
+       y = "Shannon Diversity Index (TMM)", 
+       fill = "Species") + 
+  theme_bw() +
+  theme(axis.title.x = element_text(size = 26), 
+        axis.text.x = element_text(size = 22, face = "italic"), 
+        axis.title.y = element_text(size = 26), 
+        axis.text.y = element_text(size = 24), 
+        legend.position = "none",
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_rect(fill = "white", colour = "black")) +
+  guides(x = guide_axis(angle = 90))
+
+# Output plot
+# png(here("Output", "FigureS2.png"), width = 2400, height = 2900, res = 200)
+plot_grid(FigS2_p1, FigS2_p2, ncol = 1, align = "v", rel_heights = c(1,1.7))
+# dev.off()
+```
+
+***
+
+## Figure S3 
+
+```{r fig.width=15, fig.height=15}
+# Extract no outcome cohort 
+nooutcomecohort <- finalcohort %>%
+  filter(is.na(Age) | is.na(BirthGestation))
+
+# Merge metadata and species relative abundance for no outcome cohort
+nooutcomecohort_meta_species <- 
+  merge(nooutcomecohort, fullcohort_species, 
+        by = "Sample_ID", all = FALSE) %>%
+  select(Sample_ID, VMG, Lactobacillus_crispatus:Veillonella_spp.) %>%
+  arrange(VMG) %>%
+  rowid_to_column(var = "RowNum") %>%
+  pivot_longer(cols = Lactobacillus_crispatus:Veillonella_spp.) %>%
+  rename(Species = "name") %>%
+  mutate(VMG = factor(VMG,
+                      levels = c("VMG I", "VMG II", "VMG III", "VMG IV-A", 
+                                 "VMG IV-B", "VMG V", "VMG VI", "VMG VII")),
+         Species = factor(Species, levels = species_levels))
+
+# Aesthetics
+species_color <- c("#1f78b4", "#33a02c", "#ff7f00", "#e31a1c", "#e31a1c", 
+                   "#e31a1c", "#e31a1c", "#e31a1c", "#e31a1c", "#fb9a99", 
+                   "#fb9a99", "#fb9a99", "#fb9a99", "#fb9a99", "#fb9a99",
+                   "#6a3d9a", "#a6cee3", "#a6cee3", "#cab2d6", "#C0C0C0")
+vmg_color <- c("#1f78b4", "#33a02c", "#ff7f00", "#e31a1c", 
+               "#fb9a99", "#6a3d9a", "#a6cee3", "#cab2d6")
+
+# Draw plot
+radial <- myRadialStackedBarPlot(nooutcomecohort_meta_species)
+donut <- myDonutPlot(nooutcomecohort_meta_species, "VMG (n=1267)")
+FigureS3 <- ggdraw() + 
+  draw_plot(radial, 0, 0, 1, 1, 0.875) + 
+  draw_plot(donut, 0.083, 0.094, 1, 1) + 
+  theme(plot.margin = unit(c(1, 3, 1, 1), "cm"))
+
+# Output plot
+# png(here("Output", "FigureS3.png"), width = 3100, height = 3000, res = 200)
+FigureS3
+# dev.off()
+```
+
+***
+
+## Figure S4
+
+> Statistics
+
+```{r}
+# Fisher's Exact Test: Final Cohort (Lactobacillus abundance and VMG)
+set.seed(1)
+ft_res <- lapply(finalcohort[,c(14,13)], 
+                 fisher.test, y = finalcohort$DNA_Extraction_Kit, 
+                 simulate.p.value = TRUE, B = 2000)
+print(ft_res)
+
+# Fisher's Exact Test: Outcome Cohort (Birth Outcome)
+set.seed(1)
+fisher.test(outcomecohort$DNA_Extraction_Kit, outcomecohort$Group_PretermTerm, 
+            simulate.p.value = TRUE, B = 2000)
+
+# Fisher's Exact Test: Subcohort (Chorioamnionitis)
+set.seed(1)
+fisher.test(subcohort$DNA_Extraction_Kit, subcohort$Chorioamnionitis, 
+            simulate.p.value = TRUE, B = 2000)
+```
+
+> Summary 
+
+```{r}
+# Lactobacillus abundance
+finalcohort %>% 
+  group_by(DNA_Extraction_Kit) %>% 
+  count(LactoDomDep) %>% 
+  mutate(Percent = round(n/sum(n)*100, 2),
+         Percentage = round(n/sum(n)*100)) %>% 
+  ungroup() %>%
+  as.data.frame()
+
+# VMG
+finalcohort %>% 
+  group_by(DNA_Extraction_Kit) %>% 
+  count(VMG) %>% 
+  mutate(Percent = round(n/sum(n)*100, 2),
+         Percentage = round(n/sum(n)*100)) %>% 
+  ungroup() %>%
+  as.data.frame()
+
+# Birth outcome 
+outcomecohort %>% 
+  group_by(DNA_Extraction_Kit) %>% 
+  count(Group_PretermTerm) %>%
+  mutate(Percent = round(n/sum(n)*100, 2),
+         Percentage = round(n/sum(n)*100)) %>% 
+  ungroup() %>%
+  as.data.frame()
+
+# Chorioamnionitis
+subcohort %>%
+  group_by(DNA_Extraction_Kit) %>%
+  count(Chorioamnionitis) %>%
+  mutate(Percent = round(n/sum(n)*100, 2),
+         Percentage = round(n/sum(n)*100)) %>% 
+  ungroup() %>%
+  as.data.frame()
+```
+
+> Plots 
+
+```{r fig.width=15, fig.height=10}
+# Lactobacillus abundance 
+count(finalcohort, DNA_Extraction_Kit)
+FigS4_p1 <- func_stackedbar_lactoabun(
+  finalcohort,
+  x_var = "DNA_Extraction_Kit",
+  lacto_colors = c("#e31a1c", "#1f78b4"),
+  title = "Lactobacillus Abundance (p=0.96)",
+  subtitle = "n=1510                                 n=1136",
+  nrow_num = 1,
+  legend_position = "bottom")
+
+# VMG 
+FigS4_p2 <- func_stackedbar_vmg(
+  finalcohort, 
+  x_var = "DNA_Extraction_Kit",
+  title = "Vaginal Microbiome Group (p=0.83)",
+  subtitle = "n=1510                                 n=1136",
+  nrow_num = 2,
+  legend_position = "bottom")
+
+# Preterm/Term
+count(outcomecohort, DNA_Extraction_Kit)
+FigS4_p3 <- func_stackedbar_ptb(
+  outcomecohort, 
+  x_var = "DNA_Extraction_Kit", 
+  title = "Birth Outcome (p=0.47)", 
+  subtitle = "n=764                               n=615", 
+  nrow_num = 1, 
+  legend_position = "bottom")
+
+# Chorioamnionitis
+count(subcohort, DNA_Extraction_Kit)
+FigS4_p4 <- func_stackedbar_chorio(
+  subcohort, 
+  x_var = "DNA_Extraction_Kit", 
+  title = "Chorioamnionitis (p=0.06)", 
+  subtitle = "n=380                               n=439", 
+  nrow_num = 1, 
+  legend_position = "bottom")
+
+# png(here("Output", "FigureS4.png"), width = 3100, height = 2500, res = 200)
+plot_grid(FigS4_p1, FigS4_p2, FigS4_p3, FigS4_p4,
+          nrow = 2, align = "h")
+# dev.off()
+```
+
+***
+
+## Figure S5
+
+```{r fig.width=15, fig.height=11}
+# Merge metadata and species relative abundance for sub-cohort
+subcohort_metaspec <- merge(subcohort, fullcohort_species, 
+                          by = "Sample_ID", all = FALSE, sort = FALSE) %>%
+  filter(LactoDomDep == "Dominant") %>%
+  filter(VMG %in% c("VMG I", "VMG II", "VMG III", "VMG V")) %>%
+  select(Sample_ID, VMG, SialidaseActivity, Lactobacillus_crispatus:Veillonella_spp.) %>%
+  pivot_longer(cols = Lactobacillus_crispatus:Veillonella_spp.) %>%
+  rename(Species = "name", Abundance = "value")
+
+# Count 
+subcohort_metaspec %>%
+  distinct(Sample_ID, .keep_all = TRUE) %>%
+  count(SialidaseActivity)
+
+# High sialidase activity microbiome profiles
+highsial_dom <- subcohort_metaspec %>% 
+  filter(SialidaseActivity == "High") 
+  
+FigureS5_p1 <- 
+  func_lacto_profiles(highsial_dom, 
+                      title = "Species-level Microbiome Profiles", 
+                      subtitle = "High Sialidase Activity + Lactobacillus Dominant (n=6)",
+                      legend_position = "none",
+                      nrow_num = 5)
+
+# Low sialidase activity microbiome profiles
+lowsial_dom <- subcohort_metaspec %>% 
+  filter(SialidaseActivity == "Low") 
+  
+FigureS5_p2 <- 
+  func_lacto_profiles(lowsial_dom, 
+                      title = "", 
+                      subtitle = "Low Sialidase Activity + Lactobacillus Dominant (n=597)",
+                      legend_position = "bottom",
+                      nrow_num = 5)
+
+
+# png(here("Output", "FigureS5.png"), width = 3300, height = 2400, res = 200)
+plot_grid(FigureS5_p1, FigureS5_p2, ncol = 1, rel_heights = c(1,1.22))
+# dev.off()
+```
+
+***
+
+## Figure S6
+
+```{r}
+# Assign PTB levels 
+outcomecohort_ptb <- outcomecohort %>% 
+  mutate(BirthGestation_weeks = BirthGestation/7,
+         Group_Gestation = case_when(
+           BirthGestation_weeks <34 ~ "EarlyPreterm",
+           BirthGestation_weeks >=34 & BirthGestation_weeks <37 ~ "LatePreterm",
+           BirthGestation_weeks >=37 ~ "Term"))
+
+# Count groups 
+count(outcomecohort_ptb, Group_Gestation)
+```
+
+> Statistics 
+
+```{r}
+# Fisher's Exact Test: Group Gestation - Lactobacillus Abundance
+set.seed(1)
+fisher.test(outcomecohort_ptb$Group_Gestation, outcomecohort_ptb$LactoDomDep, 
+            simulate.p.value = TRUE, B = 2000)
+
+# Fisher's Exact Test: Group Gestation - VMG
+set.seed(1)
+fisher.test(outcomecohort_ptb$Group_Gestation, outcomecohort_ptb$VMG, 
+            simulate.p.value = TRUE, B = 2000)
+```
+
+
+> Plots 
+
+```{r fig.width=15, fig.height=8}
+# Group Gestation: Lactobacillus Abundance
+FigureS6_p1 <- 
+  func_stackedbar_lactoabun(outcomecohort_ptb,
+                            x_var = "Group_Gestation",
+                            lacto_colors = c("#e31a1c", "#1f78b4"),
+                            title = "Lactobacillus Abundance (p=0.64)",
+                            subtitle = "n=21                       n=51                   n=1307",
+                            nrow_num = 1,
+                            legend_position = "bottom")
+
+
+# Group Gestation: VMG 
+FigureS6_p2 <- 
+  func_stackedbar_vmg(outcomecohort_ptb, 
+                      x_var = "Group_Gestation",
+                      title = "Vaginal Microbiome Group (p=0.13)",
+                      subtitle = "n=21                       n=51                   n=1307",
+                      nrow_num = 2,
+                      legend_position = "bottom")
+
+# png(here("Output", "FigureS6.png"), width = 3200, height = 1200, res = 200)
+plot_grid(FigureS6_p1, FigureS6_p2, 
+          ncol = 2, align = "h")
+# dev.off()
+```
+
+***
+
+## Figure S7
+
+Ensure `BarPlots.R` script is loaded, see Figure 2b.
+
+> Statistics
+
+```{r}
+# Fisher's Exact Test 
+set.seed(1)
+ft_res <- lapply(subcohort[,c(13,12,15,17)], 
+                 fisher.test, y = subcohort$Chorioamnionitis, 
+                 simulate.p.value = TRUE, B = 2000)
+print(ft_res)
+```
+
+> Plots
+
+```{r fig.width=15, fig.height=10}
+# Prepare data for subcohort
+subcohort_chorio <- subcohort %>%
+  mutate(Chorioamnionitis = factor(Chorioamnionitis,
+                                   levels = c("Chorio+", "Chorio-")),
+         LactoDomDep = factor(LactoDomDep,
+                              levels = c("Deplete", "Dominant")),
+         SialidaseActivity = factor(SialidaseActivity,
+                            levels = c("High", "Low")),
+         Leukocyte = factor(Leukocyte,
+                            levels = c("High", "Low")))
+
+# Count number in each chorioamnionitis group
+count(subcohort_chorio, Chorioamnionitis)
+
+# Lactobacillus Abundance 
+FigureS7b_p1 <- 
+  func_stackedbar_lactoabun(subcohort_chorio,
+                            x_var = "Chorioamnionitis",
+                            lacto_colors = c("#e31a1c", "#1f78b4"),
+                            title = "Lactobacillus Abundance (p=0.78)",
+                            subtitle = "n=216                                 n=603",
+                            nrow_num = 1,
+                            legend_position = "bottom")
+
+
+# VMG 
+FigureS7b_p2 <- 
+  func_stackedbar_vmg(subcohort_chorio, 
+                      x_var = "Chorioamnionitis",
+                      title = "Vaginal Microbiome Group (p=0.80)",
+                      subtitle = "n=216                                 n=603",
+                      nrow_num = 2,
+                      legend_position = "bottom")
+
+# Sialidase Activity 
+FigureS7b_p3 <- 
+  func_stackedbar_sial(subcohort_chorio,
+                       x_var = "Chorioamnionitis",
+                       title = "Sialidase Activity (p=0.44)",
+                       subtitle = "n=216                                 n=603",
+                       nrow_num = 1,
+                       legend_position = "bottom")
+
+# Leukocyte
+FigureS7b_p4 <- 
+  func_stackedbar_leuk(subcohort_chorio,
+                       x_var = "Chorioamnionitis",
+                       title = "Leukocyte (p=0.26)",
+                       subtitle = "n=216                                 n=603",
+                       nrow_num = 1,
+                       legend_position = "bottom")
+
+
+# png(here("Output", "FigureS7b.png"), width = 3100, height = 2500, res = 200)
+plot_grid(FigureS7b_p1, FigureS7b_p2,
+          FigureS7b_p3, FigureS7b_p4,
+          nrow = 2, align = "h")
+# dev.off()
+```
+
+***
+
+# Supplementary Tables 
+
+## Table S1
+
+See NgChen_SupplementaryTable1.csv. 
+
+## Table S2
+
+```{r}
+finalcohort %>% 
+  select(DomSpecGroup, DomSpecGroup_Proportion, ShannonDiversity, ShannonDiversity.tmm) %>%
+  split(.$DomSpecGroup) %>%
+  map(summary)
+```
+
+***
+
+## Table S3
+
+```{r}
+# Annotate women with and without outcome data 
+finalcohort_group <- finalcohort %>%
+  filter(SampleType == "TestSample") %>%
+  mutate(OutcomeGroup = case_when(!is.na(Age) & !is.na(BirthGestation) ~ "Outcome", 
+                                  is.na(Age) | is.na(BirthGestation) ~ "NoOutcome"),
+         OutcomeGroup = factor(OutcomeGroup,
+                               levels = c("Outcome", "NoOutcome")))
+
+# Count women with and without outcome data
+count(finalcohort_group, OutcomeGroup)
+
+# Women with outcome data 
+finalcohort_group %>%
+  filter(OutcomeGroup == "Outcome") %>%
+  count(VMG) %>%
+  mutate(Percentage = round(n/sum(n)*100, 2)) %>%
+  reactable()
+
+# Women without outcome data 
+finalcohort_group %>%
+  filter(OutcomeGroup == "NoOutcome") %>%
+  count(VMG) %>%
+  mutate(Percentage = round(n/sum(n)*100, 2)) %>%
+  reactable()
+```
+
+***
+
+## Table S4
+
+> Summary 
+
+```{r}
+# Merge metadata and species relative abundance for sub-cohort
+subcohort_meta_genera <- merge(subcohort, fullcohort_genera, 
+                          by = "Sample_ID", all = FALSE) %>%
+  select(Sample_ID, SialidaseActivity, Atopobium, Bifidobacterium,
+         Clostridium, Gardnerella, Lactobacillus, Megasphaera,
+         Prevotella)
+
+# Relative abundance of each genus by sialidase activity 
+subcohort_meta_genera %>%
+  split(.$SialidaseActivity) %>%
+  map(summary)
+```
+
+> Statistics
+
+```{r}
+# Mann-Whitney Test: Atopobium
+wilcox.test(Atopobium ~ SialidaseActivity, 
+            subcohort_meta_genera, 
+            p.adjust.method = "bonferroni")
+
+# Mann-Whitney Test: Bifidobacterium
+wilcox.test(Bifidobacterium ~ SialidaseActivity, 
+            subcohort_meta_genera, 
+            p.adjust.method = "bonferroni")
+
+# Mann-Whitney Test: Clostridium
+wilcox.test(Clostridium ~ SialidaseActivity, 
+            subcohort_meta_genera, 
+            p.adjust.method = "bonferroni")
+
+# Mann-Whitney Test: Gardnerella
+wilcox.test(Gardnerella ~ SialidaseActivity, 
+            subcohort_meta_genera, 
+            p.adjust.method = "bonferroni")
+
+# Mann-Whitney Test: Lactobacillus
+wilcox.test(Lactobacillus ~ SialidaseActivity, 
+            subcohort_meta_genera, 
+            p.adjust.method = "bonferroni")
+
+# Mann-Whitney Test: Megasphaera
+wilcox.test(Megasphaera ~ SialidaseActivity,
+            subcohort_meta_genera, 
+            p.adjust.method = "bonferroni")
+
+# Mann-Whitney Test: Prevotella
+wilcox.test(Prevotella ~ SialidaseActivity,
+            subcohort_meta_genera, 
+            p.adjust.method = "bonferroni")
+         
+```
+
+***
+
+## Table S4
+
+The Stat Groups were as follows: 
+
+**Group** | **Lactobacillus** | **Sialidase** | **Leukocyte**
+:-----|:---------|:---------|:---------
+A | Deplete | High | High 
+B | Dominant | High | High 
+C | Deplete | Low | High 
+D | Dominant | Low | High
+E | Deplete | High | Low 
+F | Dominant | High | Low
+G | Deplete | Low | Low
+H | Dominant | Low | Low
+
+```{r}
+# Summary
+subcohort %>%
+  mutate(StatGroup = case_when(
+    LactoDomDep == "Deplete" & SialidaseActivity == "High" & Leukocyte == "High" ~ "A",
+    LactoDomDep == "Dominant" & SialidaseActivity == "High" & Leukocyte == "High" ~ "B",
+    LactoDomDep == "Deplete" & SialidaseActivity == "Low" & Leukocyte == "High" ~ "C",
+    LactoDomDep == "Dominant" & SialidaseActivity == "Low" & Leukocyte == "High" ~ "D",
+    LactoDomDep == "Deplete" & SialidaseActivity == "High" & Leukocyte == "Low" ~ "E",
+    LactoDomDep == "Dominant" & SialidaseActivity == "High" & Leukocyte == "Low" ~ "F",
+    LactoDomDep == "Deplete" & SialidaseActivity == "Low" & Leukocyte == "Low" ~ "G",
+    LactoDomDep == "Dominant" & SialidaseActivity == "Low" & Leukocyte == "Low" ~ "H"),
+    BirthGestation_Weeks = BirthGestation/7) %>%
+  modify_if(is.character, as.factor) %>%
+  select(StatGroup, BirthGestation, BirthGestation_Weeks) %>%
+  split(.$StatGroup) %>%
+  map(summary)
+```
+
+***
+
+## Table S5
+
+The results from logistic regression analyses. The dependent variable was birth outcome (preterm/term) and independent variables were *Lactobacillus* abundance, sialidase activity and leukocyte wet mount results. 
+
+> Data 
+
+```{r}
+# Prepare data for logistic regression
+subcohort_lg <- subcohort %>%
+  select(Group_PretermTerm, SialidaseActivity, Leukocyte, LactoDomDep) %>%
+  mutate(SialidaseActivity = case_when(
+    SialidaseActivity == "High" ~ 1,
+    SialidaseActivity == "Low" ~ 0),
+    Leukocyte = case_when(
+      Leukocyte == "High" ~ 1,
+      Leukocyte == "Low" ~ 0),
+    Group_PretermTerm = case_when(
+      Group_PretermTerm == "Preterm" ~ 1,
+      Group_PretermTerm == "Term" ~ 0),
+    LactoDomDep = case_when(
+      LactoDomDep == "Deplete" ~ 1,
+      LactoDomDep == "Dominant" ~ 0))
+
+# Assign dependent variable as factor 
+subcohort_lg[,1] <- as.factor(subcohort_lg[,1]) 
+```
+
+> Exploratory Analysis
+
+**Boxplots**
+
+```{r fig.width=9, fig.height=9}
+# Aesthetics 
+main_theme <- theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5, size = 15),
+        axis.title.x = element_text(size = 15),
+        axis.text.x = element_text(size = 14),
+        axis.title.y = element_text(size = 15),
+        axis.text.y = element_text(size = 14),
+        strip.background = element_rect(color = "black", size = 1, linetype = "solid"),
+        strip.text.x = element_text(size = 15, color = "black", face = "bold"),
+        strip.text.y = element_text(size = 15, color = "black", face = "bold"),
+        legend.title = element_text(size = 14, face = "bold"),
+        legend.text = element_text(size = 14),
+        legend.position = "bottom")
+
+# Variables to loop 
+colNames <- names(subcohort_lg)[c(2:4)]
+
+# Boxplots (spread)
+list_bp <- list()
+
+for(i in colNames){
+  bp <- ggplot(subcohort_lg, aes(x = .data[[i]], fill = subcohort_lg[,1])) + 
+    stat_boxplot(geom = 'errorbar') +
+    geom_boxplot() +
+    scale_fill_manual(values = c("#ff595e", "#1982c4")) +
+    labs(fill = "Group_PretermTerm") +
+    theme_bw() +
+    main_theme + 
+    theme(axis.text.y = element_blank(),
+          axis.ticks.y.left = element_blank())
+  
+  list_bp[[i]] <- bp
+  }
+
+wrap_plots(list_bp, ncol = 1)
+
+# Descriptive stats 
+subcohort_lg %>% 
+  psych::describe()
+```
+
+**Histograms**
+
+```{r fig.width=9, fig.height=9, warning=FALSE, message=FALSE}
+# Histograms (distribution)
+list_hist <- list()
+
+for(i in colNames){
+  hist <- ggplot(subcohort_lg, aes(x = .data[[i]], fill = subcohort_lg[,1])) +
+    geom_histogram() +
+    scale_fill_manual(values = c("#ff595e", "#1982c4")) +
+    labs(fill = "sPTB1") + 
+    theme_bw() +
+    main_theme
+  
+  list_hist[[i]] <- hist
+}
+
+wrap_plots(list_hist, ncol = 1)
+```
+
+**Density Plots**
+
+```{r fig.width=9, fig.height=9}
+# Density plots (distribution)
+list_dp <- list()
+
+for(i in colNames){
+  dp <- ggplot(subcohort_lg, aes(x = .data[[i]], color = subcohort_lg[,1])) + 
+    geom_density(outline.type = "full", size = 0.7) +
+    scale_color_manual(values = c("#168aad", "#ff4d6d")) + 
+    labs(color = "sPTB1") +
+    theme_bw() + 
+    main_theme
+  
+  list_dp[[i]] <- dp
+}
+
+wrap_plots(list_dp, ncol = 2)
+```
+
+> Test Assumptions 
+
+**(a) Appropriate Outcome Structure** 
+
+YES, outcome binary as defined by preterm (1) or term (0) births.
+
+**(b) Observation Independence** 
+
+YES, none of the data points are replicates.
+
+**(c) Large Sample Size (n ≥10 in each group)**
+
+**Categorical Variables**
+
+```{r}
+# Count group sizes 
+for(i in c(2:4)) {
+  ct <- count(subcohort_lg, subcohort_lg[i])
+  print(ct)
+}
+```
+
+**(d) No Multi-collinearity**
+
+- Correlation plot significance levels: 0, `***` (0.001), `**` (0.01), `*`, `.` (0.05), "` `" (0.1), 1
+- Interpretation: `0 to 0.3` = small/weak, `0.3 to 0.5` = medium/moderate, `0.5 to 1.0` = large/strong
+
+```{r fig.width=9, fig.height=9, warning=FALSE}
+# Convert preterm/term group to numeric for correlation 
+subcohort_ptb <- subcohort_lg %>% modify_if(is.factor, as.numeric)
+
+# Correlation plots 
+corr_subcohort_lg <- select(subcohort_ptb, 1:4) # only independent variables 
+chart.Correlation(corr_subcohort_lg, method = "spearman", histogram = TRUE, pch = 19,
+                  exact = FALSE)
+mtext("Correlation Plot: Spearman Method (non-parametric)", line = 3)
+```
+
+**(e) Linearity Assumption** 
+
+No continuous variables were used. 
+
+> Logistic Regression & Model Diagnostics
+
+**Regression**
+
+```{r}
+# Logistic Regression 
+glm.fit1 <- glm(Group_PretermTerm ~ LactoDomDep + SialidaseActivity + Leukocyte, 
+                data = subcohort_lg, family = binomial)
+
+summary(glm.fit1)
+
+# AIC 
+print("Akaike Information Criteria (AIC)")
+drop1(glm.fit1)
+
+# Null and residual deviance
+print("Null and residual deviance")
+summary(glm.fit1)$deviance / summary(glm.fit1)$subcohort_lg.residual
+
+# Wald test (https://www.r-bloggers.com/2015/08/evaluating-logistic-regression-models/)
+regTermTest(glm.fit1, "LactoDomDep")
+regTermTest(glm.fit1, "SialidaseActivity")
+regTermTest(glm.fit1, "Leukocyte")
+
+# Odds ratio (https://stackoverflow.com/questions/41384075/r-calculate-and-interpret-odds-ratio-in-logistic-regression)
+exp(coef(glm.fit1))
+```
+
+> Diagnostics
+
+**Influential Values (Outliers)**
+
+```{r}
+# Outliers 
+outliers_1 <- check_outliers(glm.fit1)
+plot(outliers_1, type = "dots")
+
+# Cook's Distance 
+plot(glm.fit1, which = 4, id.n = 5)
+
+# Get data 
+data.glmfit1 <- augment(glm.fit1) %>% mutate(index = 1:n()) # Extract model results 
+
+# Top n largest values from Cook's distance 
+print("Cook's Distance Influential Values")
+data.glmfit1 %>% top_n(5, .cooksd) %>% reactable(rownames = TRUE)
+```
+
+**Residuals** 
+
+```{r echo=TRUE}
+# Binned Residuals 
+binned_residuals(glm.fit1) 
+
+# Standardized residuals 
+ggplot(data.glmfit1, aes(index, .std.resid)) + 
+  geom_point(aes(color = subcohort_lg[,1]), alpha = .5) +
+  scale_color_manual(values = c("#168aad", "#ff4d6d")) + 
+  labs(title = "Standardised Residuals", color = "sPTB1") +
+  theme_bw() + 
+  main_theme
+
+# Potential influential data points with abs(.std.res) > 3 (i.e. outliers)
+print("Influential Standardized Residuals")
+data.glmfit1 %>% filter(abs(.std.resid) > 3) %>% reactable(rownames = TRUE)
+```
+
+**Multicollinearity**
+
+```{r}
+# Check multicollinearity using Variance Inflation Factor (VIF) - <5-10 is good 
+print("Variance Inflation Factor (VIF) - <5-10 is good")
+car::vif(glm.fit1)
+
+# Multicollinearity 
+multicol_1 <- check_collinearity(glm.fit1)
+plot(multicol_1) +
+  guides(x = guide_axis(angle = 90))
+```
+
+***
+
+# Additional Analyses
+
+## DNA Extraction Kit 
+
+### Lactobacillus Abundance (Dom/Dep)
+
+```{r warning=FALSE, fig.width=13, fig.height=5}
+# Fisher's Exact Test
+set.seed(1)
+fisher.test(finalcohort$DNA_Extraction_Kit, finalcohort$LactoDomDep, 
+            simulate.p.value = TRUE, B = 2000)
+
+# Plots
+domdep_colors <- c("#e31a1c", "#1f78b4")
+func_barchart_stackedbar(data = finalcohort, 
+                         x_var = finalcohort$DNA_Extraction_Kit, 
+                         fill_var = finalcohort$LactoDomDep, 
+                         fill_var_colors = domdep_colors, 
+                         title = "DNA Extraction Kit x Lacto (Dom/Dep)", 
+                         lab_x = "DNA_Extraction_Kit", 
+                         lab_fill = "Lactobacillus",
+                         x_guide = guide_axis())
+```
+
+### VMG
+
+```{r warning=FALSE, fig.width=13, fig.height=6}
+# Fisher's Exact Test
+set.seed(1)
+fisher.test(finalcohort$DNA_Extraction_Kit, finalcohort$VMG, 
+            simulate.p.value = TRUE, B = 2000)
+
+# Plots
+func_barchart_stackedbar(data = finalcohort, 
+                         x_var = finalcohort$DNA_Extraction_Kit, 
+                         fill_var = finalcohort$VMG, 
+                         fill_var_colors = vmg_color, 
+                         title = "DNA Extraction Kit x VMG", 
+                         lab_x = "DNA_Extraction_Kit", 
+                         lab_fill = "VMG",
+                         x_guide = guide_axis())
+```
+
+### Birth Outcome (Preterm/Term)
+
+```{r warning=FALSE, fig.width=13, fig.height=6}
+# Fisher's Exact Test
+set.seed(1)
+fisher.test(outcomecohort$DNA_Extraction_Kit, outcomecohort$Group_PretermTerm, 
+            simulate.p.value = TRUE, B = 2000)
+
+# Plots
+ptb_colors <- c("#ff595e", "#1982c4")
+func_barchart_stackedbar(data = outcomecohort, 
+                         x_var = outcomecohort$DNA_Extraction_Kit, 
+                         fill_var = outcomecohort$Group_PretermTerm, 
+                         fill_var_colors = ptb_colors, 
+                         title = "DNA Extraction Kit x Birth Outcome", 
+                         lab_x = "DNA_Extraction_Kit", 
+                         lab_fill = "Birth Outcome",
+                         x_guide = guide_axis())
+```
+
+***
+
+## Mode of Labour 
+
+```{r}
+outcomecohort_mol <- filter(outcomecohort, Mode_of_Labour != "Miscarriage")
+```
+
+
+### Lactobacillus Abundance
+
+```{r warning=FALSE, fig.width=13, fig.height=6}
+# Fisher's Exact Test
+set.seed(1)
+fisher.test(outcomecohort_mol$Mode_of_Labour, outcomecohort_mol$LactoDomDep, 
+            simulate.p.value = TRUE, B = 2000)
+
+# Plots
+domdep_colors <- c("#e31a1c", "#1f78b4")
+func_barchart_stackedbar(data = outcomecohort_mol, 
+                         x_var = outcomecohort_mol$Mode_of_Labour, 
+                         fill_var = outcomecohort_mol$LactoDomDep, 
+                         fill_var_colors = domdep_colors, 
+                         title = "Mode of Labour x Lacto (Dom/Dep)", 
+                         lab_x = "Mode of Labour", 
+                         lab_fill = "Lactobacillus",
+                         x_guide = guide_axis(angle = 45))
+```
+
+### VMG
+
+```{r warning=FALSE, fig.width=13, fig.height=6}
+# Fisher's Exact Test
+set.seed(1)
+fisher.test(outcomecohort_mol$Mode_of_Labour, outcomecohort_mol$VMG, 
+            simulate.p.value = TRUE, B = 2000)
+
+# Plots
+func_barchart_stackedbar(data = outcomecohort_mol, 
+                         x_var = outcomecohort_mol$Mode_of_Labour, 
+                         fill_var = outcomecohort_mol$VMG, 
+                         fill_var_colors = vmg_color, 
+                         title = "Mode of Labour x VMG", 
+                         lab_x = "Mode of Labour", 
+                         lab_fill = "VMG",
+                         x_guide = guide_axis(angle = 45))
+```
+
+***
+
+# Packages 
+
+```{r}
+sessionInfo()
+```
+
