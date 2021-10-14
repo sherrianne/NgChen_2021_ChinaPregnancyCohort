@@ -880,7 +880,7 @@ fig4b_stat <- subcohort %>%
     LactoDomDep == "Deplete" & SialidaseActivity == "Low" & Leukocyte == "High" ~ "C",
     LactoDomDep == "Dominant" & SialidaseActivity == "Low" & Leukocyte == "High" ~ "D",
     LactoDomDep == "Deplete" & SialidaseActivity == "High" & Leukocyte == "Low" ~ "E",
-    LactoDomDep == "Dominant" & SialidaseActivity == "High" & Leukocyte == "Low" ~ "F",
+    # LactoDomDep == "Dominant" & SialidaseActivity == "High" & Leukocyte == "Low" ~ "F",
     LactoDomDep == "Deplete" & SialidaseActivity == "Low" & Leukocyte == "Low" ~ "G",
     LactoDomDep == "Dominant" & SialidaseActivity == "Low" & Leukocyte == "Low" ~ "H"))
 
@@ -1557,7 +1557,7 @@ wilcox.test(Prevotella ~ SialidaseActivity,
 
 ***
 
-## Table S4
+## Table S5
 
 The Stat Groups were as follows: 
 
@@ -1593,7 +1593,7 @@ subcohort %>%
 
 ***
 
-## Table S5
+## Table S6
 
 The results from logistic regression analyses. The dependent variable was birth outcome (preterm/term) and independent variables were *Lactobacillus* abundance, sialidase activity and leukocyte wet mount results. 
 
