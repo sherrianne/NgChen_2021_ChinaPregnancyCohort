@@ -1449,13 +1449,15 @@ plot_grid(FigureS7b_p1, FigureS7b_p2,
 
 ***
 
+# Supplementary Data File 
+
+See Supplementary Data 1 of paper.
+
+***
+
 # Supplementary Tables 
 
 ## Table S1
-
-See NgChen_SupplementaryTable1.csv. 
-
-## Table S2
 
 ```{r}
 finalcohort %>% 
@@ -1466,12 +1468,12 @@ finalcohort %>%
 
 ***
 
-## Table S3
+## Table S2
 
 ```{r}
 # Annotate women with and without outcome data 
 finalcohort_group <- finalcohort %>%
-  filter(SampleType == "TestSample") %>%
+  filter(SampleType == "Vaginal swab") %>%
   mutate(OutcomeGroup = case_when(!is.na(Age) & !is.na(BirthGestation) ~ "Outcome", 
                                   is.na(Age) | is.na(BirthGestation) ~ "NoOutcome"),
          OutcomeGroup = factor(OutcomeGroup,
@@ -1497,7 +1499,7 @@ finalcohort_group %>%
 
 ***
 
-## Table S4
+## Table S3
 
 > Summary 
 
@@ -1557,7 +1559,7 @@ wilcox.test(Prevotella ~ SialidaseActivity,
 
 ***
 
-## Table S5
+## Table S4
 
 The Stat Groups were as follows: 
 
@@ -1593,7 +1595,7 @@ subcohort %>%
 
 ***
 
-## Table S6
+## Table S5
 
 The results from logistic regression analyses. The dependent variable was birth outcome (preterm/term) and independent variables were *Lactobacillus* abundance, sialidase activity and leukocyte wet mount results. 
 
