@@ -12,7 +12,7 @@ output:
 
 The analysis codes and processed datasets pertain to the following publication: 
 
-Ng/Chen, et al. The pregnancy vaginal microbiome, sialidase activity, leukocyte presence and lower risk of preterm birth in a Chinese population. Journal X,X, doi: (2021).
+Ng, S. et al. Large-scale characterisation of the pregnancy vaginal microbiome and sialidase activity in a low-risk Chinese population. npj Biofilms and Microbiomes 7, doi:10.1038/s41522-021-00261-0 (2021).
 
 
 ***
